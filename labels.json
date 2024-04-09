@@ -1,0 +1,38 @@
+[
+    {
+        "name": "unclassified",
+        "color": "#969696"
+    },
+    {
+        "name": "man-made terrain",
+        "color": "#cc3399"
+    },
+    {
+        "name": "natural terrain",
+        "color": "#996633"
+    },
+    {
+        "name": "high vegetation",
+        "color": "#006600"
+    },
+    {
+        "name": "low vegetation",
+        "color": "#99ff33"
+    },
+    {
+        "name": "buildings",
+        "color": "#660033"
+    },
+    {
+        "name": "hard scape",
+        "color": "#666899"
+    },
+    {
+        "name": "scanning artefacts",
+        "color": "#ff0000"
+    },
+    {
+        "name": "cars",
+        "color": "#3366ff"
+    }
+]
