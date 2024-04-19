@@ -1,0 +1,5 @@
+12.04.2024
+Task: Overview of the existing methods for PointCloudSegmentation problem
+
+19.04.2024
+Task: Implement and test PointNet as a baseline model for the problem
