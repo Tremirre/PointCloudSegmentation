@@ -50,12 +50,19 @@ def parse_args() -> argparse.Namespace:
         default=30,
         help="Numer of points sampled from the query radius",
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for sampling",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
     print("Reading input file...")
+    np.random.seed(args.seed)
     data_df = pd.read_table(
         args.input,
         header=None,
@@ -70,7 +77,7 @@ if __name__ == "__main__":
     print(
         f"Removed {rows_before - len(data_df)} rows with label {args.skip_label} (remaining: {len(data_df)})"
     )
-    sample = data_df.sample(frac=args.saturation)
+    sample = data_df.sample(frac=args.saturation, random_state=args.seed)
     data_matrix = data_df.to_numpy()
     radius_squared = args.radius**2
     args.output.mkdir(parents=True, exist_ok=True)
@@ -79,6 +86,7 @@ if __name__ == "__main__":
         f.unlink()
     print("Aggregating neighbourhoods...")
     omit_count = 0
+    agg_counts = np.zeros(9)
     for idx, row in tqdm.tqdm(sample.iterrows(), total=len(sample)):
         x, y, z = row[["x", "y", "z"]].to_numpy()
         neighbourhood = data_matrix[
@@ -90,10 +98,16 @@ if __name__ == "__main__":
         if neighbourhood.shape[0] < args.sample_size:
             omit_count += 1
             continue
+        labels = neighbourhood[:, -1]
+        label_counts = np.bincount(labels.astype(int))
+        agg_counts[: len(label_counts)] += label_counts
         indices = np.arange(neighbourhood.shape[0])
         np.random.shuffle(indices)
         neighbourhood = neighbourhood[indices[: args.sample_size]]
         out = args.output / f"{idx}.npy"
         np.save(out, neighbourhood)
+    print("Aggregated counts:")
+    for idx, count in enumerate(agg_counts):
+        print(f"{idx}: {count}")
     print(f"Skipped {omit_count} query points")
     print("Done!")
