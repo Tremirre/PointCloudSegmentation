@@ -1,3 +1,8 @@
+"""
+Code combined from PointConv-Pytorch: https://github.com/DylanWusee/pointconv_pytorch
+and PointNet-Pytorch: https://github.com/yanx27/Pointnet_Pointnet2_pytorch
+"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
