@@ -39,10 +39,10 @@ def parse_args() -> argparse.Namespace:
         help="Label to skip (default: 0 for unlabelled points)",
     )
     parser.add_argument(
-        "--saturation",
-        type=float,
-        default=0.1,
-        help="Percentage of points from which to sample",
+        "--n-samples",
+        type=int,
+        help="Number of samples to process (if not specified, process all samples)",
+        required=True,
     )
     parser.add_argument(
         "--sample-size",
@@ -77,7 +77,7 @@ if __name__ == "__main__":
     print(
         f"Removed {rows_before - len(data_df)} rows with label {args.skip_label} (remaining: {len(data_df)})"
     )
-    sample = data_df.sample(frac=args.saturation, random_state=args.seed)
+    sample = data_df.sample(n=args.n_samples, random_state=args.seed)
     data_matrix = data_df.to_numpy()
     radius_squared = args.radius**2
     args.output.mkdir(parents=True, exist_ok=True)
