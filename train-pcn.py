@@ -11,11 +11,11 @@ import tqdm
 import pcs.models.pointconv_simple
 import pcs.dataset
 
-BATCH_SIZE = 2
+BATCH_SIZE = 8
 NUM_CLASSES = 8
 DATA_DIR = "./data/aggregated/bild/"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-MAX_EPOCHS = 100
+MAX_EPOCHS = 10
 SAVE_DIR = "./out/checkpoints/"
 HISTORY_DIR = "./out/history/"
 SAVE_EVERY = 10
@@ -56,9 +56,7 @@ def load_data(data_dir: str, batch_size: int) -> Dataloaders:
 
 def main():
     dataloaders = load_data(DATA_DIR, BATCH_SIZE)
-    epoch_length = len(dataloaders.train) // BATCH_SIZE + bool(
-        len(dataloaders.train) % BATCH_SIZE
-    )
+    epoch_length = len(dataloaders.train)
     os.makedirs(SAVE_DIR, exist_ok=True)
     os.makedirs(HISTORY_DIR, exist_ok=True)
 
@@ -99,7 +97,8 @@ def main():
             torch.save(model.state_dict(), SAVE_DIR + f"model_{epoch}.pt")
             print(f"Saved model at epoch {epoch}")
 
-    torch.save(model.state_dict(), SAVE_DIR + "model_final.pt")
+    now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    torch.save(model.state_dict(), SAVE_DIR + f"model_final_{now}.pt")
     print("Training complete")
 
     model.eval()
@@ -111,7 +110,7 @@ def main():
             losses.append(loss.item())
         print(f"Test loss: {np.mean(losses)}")
 
-    history_file = HISTORY_DIR + f"history_{datetime.datetime.now()}.json"
+    history_file = HISTORY_DIR + f"history_{now}.json"
     with open(history_file, "w") as f:
         json.dump(dataclasses.asdict(history), f)
     print(f"Saved history to {history_file}")
