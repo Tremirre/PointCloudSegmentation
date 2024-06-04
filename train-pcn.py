@@ -1,3 +1,5 @@
+import typing
+import argparse
 import os
 import datetime
 import dataclasses
@@ -11,14 +13,40 @@ import tqdm
 import pcs.models.pointconv_simple
 import pcs.dataset
 
-BATCH_SIZE = 8
 NUM_CLASSES = 8
-DATA_DIR = "./data/aggregated/bild/"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-MAX_EPOCHS = 10
 SAVE_DIR = "./out/checkpoints/"
 HISTORY_DIR = "./out/history/"
 SAVE_EVERY = 10
+
+
+class Args(typing.NamedTuple):
+    data_dir: str
+    batch_size: int
+    max_epochs: int
+
+
+def parse_args() -> Args:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--data-dir",
+        type=str,
+        required=True,
+        help="Path to the directory containing the data",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=8,
+        help="Batch size for training",
+    )
+    parser.add_argument(
+        "--max-epochs",
+        type=int,
+        default=10,
+        help="Maximum number of epochs to train for",
+    )
+    return parser.parse_args()
 
 
 @dataclasses.dataclass
@@ -30,8 +58,54 @@ class Dataloaders:
 
 @dataclasses.dataclass
 class History:
-    train_loss: list[list[float]] = dataclasses.field(default_factory=list)
+    batch_size: int
+    epochs: int
+    dataset: str
+    train_loss: list[float] = dataclasses.field(default_factory=list)
     val_loss: list[float] = dataclasses.field(default_factory=list)
+    test_acc: list[float] = dataclasses.field(default_factory=list)
+    test_iou: list[float] = dataclasses.field(default_factory=list)
+    start_time: str = dataclasses.field(
+        default_factory=lambda: datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    )
+
+    def export(self):
+        filename = f"{HISTORY_DIR}history_{self.start_time}.json"
+        with open(filename, "w") as f:
+            json.dump(dataclasses.asdict(self), f)
+
+
+def calculate_per_class_stats(
+    model: torch.nn.Module, dataset: torch.utils.data.DataLoader, n_classes: int
+) -> tuple[list[float], list[float]]:
+    all_labels = []
+    all_predictions = []
+    for points, labels in tqdm.tqdm(dataset):
+        with torch.no_grad():
+            predictions = model(points)
+        all_labels.append(labels)
+        all_predictions.append(predictions.argmax(dim=1))
+    all_labels = torch.cat(all_labels)
+    all_predictions = torch.cat(all_predictions)
+    per_class_accuracy = []
+    for i in range(n_classes):
+        mask = all_labels == i
+        correct = (all_predictions[mask] == i).sum().item()
+        total = mask.sum().item()
+        try:
+            per_class_accuracy.append(correct / total)
+        except ZeroDivisionError:
+            per_class_accuracy.append(-1)
+    per_class_iou = []
+    for i in range(n_classes):
+        mask = all_labels == i
+        intersection = (all_predictions[mask] == i).sum().item()
+        union = mask.sum().item() + (all_predictions == i).sum().item() - intersection
+        try:
+            per_class_iou.append(intersection / union)
+        except ZeroDivisionError:
+            per_class_iou.append(-1)
+    return per_class_accuracy, per_class_iou
 
 
 def load_data(data_dir: str, batch_size: int) -> Dataloaders:
@@ -55,7 +129,8 @@ def load_data(data_dir: str, batch_size: int) -> Dataloaders:
 
 
 def main():
-    dataloaders = load_data(DATA_DIR, BATCH_SIZE)
+    args = parse_args()
+    dataloaders = load_data(args.data_dir, args.batch_size)
     epoch_length = len(dataloaders.train)
     os.makedirs(SAVE_DIR, exist_ok=True)
     os.makedirs(HISTORY_DIR, exist_ok=True)
@@ -69,20 +144,27 @@ def main():
     loss_fn = torch.nn.NLLLoss().to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
-    history = History()
-    for epoch in range(MAX_EPOCHS):
+    history = History(
+        batch_size=args.batch_size,
+        epochs=args.batch_size,
+        dataset=args.data_dir.replace("\\", "/").split("/")[-2],
+    )
+    for epoch in range(args.max_epochs):
         model.train()
         pbar = tqdm.tqdm(dataloaders.train, total=epoch_length)
-        for i, (points, labels) in enumerate(pbar):
+        train_loss = []
+        for points, labels in pbar:
             optimizer.zero_grad()
             pred = model(points)
             loss = loss_fn(pred, labels)
             loss.backward()
-            history.train_loss.append(loss.item())
+            train_loss.append(loss.item())
             optimizer.step()
-            pbar.set_description(f"Epoch {epoch + 1}/{MAX_EPOCHS}, loss: {loss.item()}")
+            pbar.set_description(
+                f"Epoch {epoch + 1}/{args.max_epochs}, loss: {loss.item()}"
+            )
         pbar.close()
-
+        history.train_loss.append(np.mean(train_loss))
         model.eval()
         with torch.no_grad():
             losses = []
@@ -97,8 +179,9 @@ def main():
             torch.save(model.state_dict(), SAVE_DIR + f"model_{epoch}.pt")
             print(f"Saved model at epoch {epoch}")
 
-    now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    torch.save(model.state_dict(), SAVE_DIR + f"model_final_{now}.pt")
+        history.export()
+
+    torch.save(model.state_dict(), SAVE_DIR + f"model_final_{history.start_time}.pt")
     print("Training complete")
 
     model.eval()
@@ -110,10 +193,10 @@ def main():
             losses.append(loss.item())
         print(f"Test loss: {np.mean(losses)}")
 
-    history_file = HISTORY_DIR + f"history_{now}.json"
-    with open(history_file, "w") as f:
-        json.dump(dataclasses.asdict(history), f)
-    print(f"Saved history to {history_file}")
+    acc, iou = calculate_per_class_stats(model, dataloaders.test, NUM_CLASSES)
+    history.test_acc = acc
+    history.test_iou = iou
+    history.export()
 
 
 if __name__ == "__main__":
