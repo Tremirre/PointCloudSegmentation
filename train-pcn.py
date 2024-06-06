@@ -13,12 +13,22 @@ import tqdm
 
 import pcs.models.pointconv_simple
 import pcs.dataset
+import pcs.preprocess
 
 NUM_CLASSES = 8
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 SAVE_DIR = "./out/checkpoints/"
 HISTORY_DIR = "./out/history/"
 SAVE_EVERY = 10
+
+PC_TRANSFORMS = (
+    pcs.preprocess.normalize_position,
+    pcs.preprocess.normalize_colors,
+    pcs.preprocess.normalize_intensity,
+    lambda x: torch.tensor(x.T, dtype=torch.float32),
+)
+
+LABEL_TRANSFORMS = (lambda x: torch.tensor(x - 1, dtype=torch.long),)
 
 
 class Args(typing.NamedTuple):
@@ -123,13 +133,12 @@ def calculate_per_class_stats(
 
 
 def load_data(data_dir: str, batch_size: int) -> Dataloaders:
-    p_transforms = lambda x: torch.tensor(x.T, dtype=torch.float32).to(DEVICE)
-    l_transforms = lambda x: torch.tensor(x - 1, dtype=torch.long).to(DEVICE)
     datasets = {
         split: pcs.dataset.SemSegDataset(
             data_dir=data_dir + split,
-            point_transforms=(p_transforms,),
-            label_transforms=(l_transforms,),
+            point_transforms=PC_TRANSFORMS,
+            label_transforms=LABEL_TRANSFORMS,
+            load_device=DEVICE,
         )
         for split in ["train", "val", "test"]
     }
