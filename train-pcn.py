@@ -1,3 +1,4 @@
+import time
 import typing
 import argparse
 import os
@@ -24,6 +25,7 @@ class Args(typing.NamedTuple):
     data_dir: str
     batch_size: int
     max_epochs: int
+    model_name: str
 
 
 def parse_args() -> Args:
@@ -46,6 +48,12 @@ def parse_args() -> Args:
         default=10,
         help="Maximum number of epochs to train for",
     )
+    parser.add_argument(
+        "--model-name",
+        type=str,
+        default="pointconv",
+        help="Name of the model to train",
+    )
     return parser.parse_args()
 
 
@@ -58,9 +66,11 @@ class Dataloaders:
 
 @dataclasses.dataclass
 class History:
+    model_name: str
     batch_size: int
     epochs: int
     dataset: str
+    epoch_times: list[float] = dataclasses.field(default_factory=list)
     train_loss: list[float] = dataclasses.field(default_factory=list)
     val_loss: list[float] = dataclasses.field(default_factory=list)
     test_acc: list[float] = dataclasses.field(default_factory=list)
@@ -69,8 +79,12 @@ class History:
         default_factory=lambda: datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     )
 
+    def __post_init__(self):
+        if self.model_name == "pointconv":
+            self.model_name += f"_{self.start_time}"
+
     def export(self):
-        filename = f"{HISTORY_DIR}history_{self.start_time}.json"
+        filename = f"{HISTORY_DIR}{self.model_name}_hist.json"
         with open(filename, "w") as f:
             json.dump(dataclasses.asdict(self), f)
 
@@ -145,11 +159,13 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
     history = History(
+        model_name=args.model_name,
         batch_size=args.batch_size,
         epochs=args.batch_size,
         dataset=args.data_dir.replace("\\", "/").split("/")[-2],
     )
     for epoch in range(args.max_epochs):
+        epoch_start_time = time.perf_counter()
         model.train()
         pbar = tqdm.tqdm(dataloaders.train, total=epoch_length)
         train_loss = []
@@ -179,9 +195,11 @@ def main():
             torch.save(model.state_dict(), SAVE_DIR + f"model_{epoch}.pt")
             print(f"Saved model at epoch {epoch}")
 
+        epoch_time = time.perf_counter() - epoch_start_time
+        history.epoch_times.append(epoch_time)
         history.export()
 
-    torch.save(model.state_dict(), SAVE_DIR + f"model_final_{history.start_time}.pt")
+    torch.save(model.state_dict(), SAVE_DIR + history.model_name + ".pt")
     print("Training complete")
 
     model.eval()
