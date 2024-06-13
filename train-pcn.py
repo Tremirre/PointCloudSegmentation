@@ -181,11 +181,14 @@ def main():
     loss_fn = torch.nn.NLLLoss().to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     if args.load_checkpoint:
+        args.load_checkpoint = args.load_checkpoint.replace("\\", "/")
         model.load_state_dict(torch.load(args.load_checkpoint))
         model_name = args.load_checkpoint.split("/")[-1].split("_")[0]
         history_file = f"{HISTORY_DIR}{model_name}_hist.json"
         history = History.load(history_file)
         start_epoch = len(history.train_loss)
+        print(f"Loaded model from {args.load_checkpoint}")
+        print(f"Continuing training from epoch {start_epoch}")
     else:
         history = History(
             model_name=args.model_name,
