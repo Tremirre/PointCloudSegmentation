@@ -19,7 +19,7 @@ NUM_CLASSES = 8
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 SAVE_DIR = "./out/checkpoints/"
 HISTORY_DIR = "./out/history/"
-SAVE_EVERY = 10
+SAVE_EVERY = 5
 
 PC_TRANSFORMS = (
     pcs.preprocess.normalize_position,
@@ -201,7 +201,7 @@ def main():
             print(f"Validation loss: {np.mean(losses)}")
 
         if epoch and (epoch % SAVE_EVERY == 0):
-            torch.save(model.state_dict(), SAVE_DIR + f"model_{epoch}.pt")
+            torch.save(model.state_dict(), SAVE_DIR + history.model_name + f"_c{epoch}.pt")
             print(f"Saved model at epoch {epoch}")
 
         epoch_time = time.perf_counter() - epoch_start_time
