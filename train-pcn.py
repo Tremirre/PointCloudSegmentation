@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import time
 import typing
 import argparse
@@ -64,6 +66,12 @@ def parse_args() -> Args:
         default="pointconv",
         help="Name of the model to train",
     )
+    parser.add_argument(
+        "--load-checkpoint",
+        type=str,
+        default="",
+        help="Path to a checkpoint to load of a model to continue training from",
+    )
     return parser.parse_args()
 
 
@@ -97,6 +105,12 @@ class History:
         filename = f"{HISTORY_DIR}{self.model_name}_hist.json"
         with open(filename, "w") as f:
             json.dump(dataclasses.asdict(self), f)
+
+    @classmethod
+    def load(cls, filename: str) -> History:
+        with open(filename, "r") as f:
+            data = json.load(f)
+        return cls(**data)
 
 
 def calculate_per_class_stats(
@@ -166,14 +180,22 @@ def main():
     ).to(DEVICE)
     loss_fn = torch.nn.NLLLoss().to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    if args.load_checkpoint:
+        model.load_state_dict(torch.load(args.load_checkpoint))
+        model_name = args.load_checkpoint.split("/")[-1].split("_")[0]
+        history_file = f"{HISTORY_DIR}{model_name}_hist.json"
+        history = History.load(history_file)
+        start_epoch = len(history.train_loss)
+    else:
+        history = History(
+            model_name=args.model_name,
+            batch_size=args.batch_size,
+            epochs=args.batch_size,
+            dataset=args.data_dir.replace("\\", "/").split("/")[-2],
+        )
+        start_epoch = 0
 
-    history = History(
-        model_name=args.model_name,
-        batch_size=args.batch_size,
-        epochs=args.batch_size,
-        dataset=args.data_dir.replace("\\", "/").split("/")[-2],
-    )
-    for epoch in range(args.max_epochs):
+    for epoch in range(start_epoch, args.max_epochs):
         epoch_start_time = time.perf_counter()
         model.train()
         pbar = tqdm.tqdm(dataloaders.train, total=epoch_length)
@@ -201,7 +223,9 @@ def main():
             print(f"Validation loss: {np.mean(losses)}")
 
         if epoch and (epoch % SAVE_EVERY == 0):
-            torch.save(model.state_dict(), SAVE_DIR + history.model_name + f"_c{epoch}.pt")
+            torch.save(
+                model.state_dict(), SAVE_DIR + history.model_name + f"_c{epoch}.pt"
+            )
             print(f"Saved model at epoch {epoch}")
 
         epoch_time = time.perf_counter() - epoch_start_time
